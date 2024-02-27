@@ -2,6 +2,7 @@
 # coding=utf8
 import sys
 sys.path.append('/home/pi/ArmPi/')
+import logging
 import cv2
 import time
 import Camera
@@ -13,7 +14,9 @@ import HiwonderSDK.Board as Board
 from CameraCalibration.CalibrationConfig import *
 from ColorTracking import getAreaMaxContour
 
-# This is the file I will do all my code in
+logging_format = "%(asctime)s: %(message)s"
+logging.basicConfig(format=logging_format, level=logging.INFO,datefmt="%H:%M:%S")
+logging.getLogger().setLevel(logging.DEBUG)# This is the file I will do all my code in
 
 class My_Arm:
     def __init__(self):
@@ -36,7 +39,7 @@ class My_Arm:
     def init(self):
         Board.setBusServoPulse(1, self.servo_1 - 50, 300)
         Board.setBusServoPulse(2, 500, 500)
-        AK.setPitchRangeMoving((0, 10, 10), -30, -30, -90, 1500)
+        self.AK.setPitchRangeMoving((0, 10, 10), -30, -30, -90, 1500)
 
     def reset(self):
         self.start_pickup = False
@@ -104,21 +107,30 @@ class My_Arm:
 
     def run(self):
         # Need to run init and start
+        logging.debug("Init")
         self.init()
+        logging.debug("Start")
         self.start()
+        logging.debug("Opening camera")
         cam = Camera.Camera()
         cam.camera_open()
         if not self.is_running:
-            print("Not Running!!")
+            logging.error("Not Running!!")
             return None
         while input("Press q to quit ") != 'q':
             inp = input("What color to detect (r, g, b)? ")
+            logging.debug(f'Setting target value to {inp}')
             self.set_target_color(inp)
+            logging.debug("Getting img")
             img = self.get_image(cam)
+            logging.debug("Resizing and smoothing")
             lab_img = self.resize_and_smooth(img)
+            logging.debug("detecting target color")
             area_max_cont, area_max = self.detect_target_color(lab_img)
             if area_max > 2500:
+                logging.debug("detecting box")
                 world_x, world_y = self.detect_box(area_max_cont)
+                logging.debug("Drawing")
                 self.draw(img, world_x, world_y)
             cv2.imshow("img", img)
             cv2.waitKey(1)
