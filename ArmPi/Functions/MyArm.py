@@ -362,10 +362,10 @@ class My_Arm:
             if img is not None:
                 img = self.do_perception(cam)
             
-            cv2.imshow("img", img)
-            key = cv2.waitKey(1)
-            if key == 27:
-                break
+                cv2.imshow("img", img)
+                key = cv2.waitKey(1)
+                if key == 27:
+                    break
         cam.camera_close()
         cv2.destroyAllWindows()
 
