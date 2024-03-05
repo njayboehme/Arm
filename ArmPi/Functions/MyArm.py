@@ -159,19 +159,24 @@ class My_Arm:
     
         if not self.is_running:
             return img
-        
+        logging.debug("Entering resize_and_smooth")
         lab_img = self.resize_and_smooth(img_copy)
+        logging.debug("Leaving resize_and_smooth")
         area_max = 0
         area_max_cont = 0
         if not self.start_pick_up:
+            logging.debug('Entering detect_target_color')
             area_max_cont, area_max = self.detect_target_color(lab_img)
             if area_max > 2500:
+                logging.debug('Entering detect_box')
                 self.world_x, self.world_y = self.detect_box(area_max_cont)
+                logging.debug('About to draw')
                 self.draw(img, self.world_x, self.world_y)
 
-                distance = math.sqrt(pow(self.world_x - self.last_x, 2) + pow(self.world_y - self.last_y, 2)) #对比上次坐标来判断是否移动
+                distance = math.sqrt(pow(self.world_x - self.last_x, 2) + pow(self.world_y - self.last_y, 2))
                 self.last_x, self.last_y = self.world_x, self.world_y
                 self.track = True
+                logging.debug('Entering finish_move')
                 self.finish_move(distance)
         return img
 
@@ -217,7 +222,7 @@ class My_Arm:
         Board.setBusServoPulse(1, self.servo_1 - 70, 300)
         time.sleep(0.5)
         Board.setBusServoPulse(2, 500, 500)
-        AK.setPitchRangeMoving((0, 10, 10), -30, -30, -90, 1500)
+        self.AK.setPitchRangeMoving((0, 10, 10), -30, -30, -90, 1500)
         time.sleep(1.5)
 
     def move_arm(self):
@@ -232,7 +237,7 @@ class My_Arm:
         
         if not self.is_running:
             return True
-        AK.setPitchRangeMoving((self.world_X, self.world_Y, 2), -90, -90, 0, 1000)  # 降低高度
+        self.AK.setPitchRangeMoving((self.world_X, self.world_Y, 2), -90, -90, 0, 1000)  # 降低高度
         time.sleep(2)
         
         if not self.is_running:
@@ -243,13 +248,13 @@ class My_Arm:
         if not self.is_running:
             return True
         Board.setBusServoPulse(2, 500, 500)
-        AK.setPitchRangeMoving((self.world_X, self.world_Y, 12), -90, -90, 0, 1000)  # 机械臂抬起
+        self.AK.setPitchRangeMoving((self.world_X, self.world_Y, 12), -90, -90, 0, 1000)  # 机械臂抬起
         time.sleep(1)
         
         if not self.is_running:
             return True
         # 对不同颜色方块进行分类放置
-        result = AK.setPitchRangeMoving((self.coordinate[self.detect_color][0], self.coordinate[self.detect_color][1], 12), -90, -90, 0)   
+        result = self.AK.setPitchRangeMoving((self.coordinate[self.detect_color][0], self.coordinate[self.detect_color][1], 12), -90, -90, 0)   
         time.sleep(result[2]/1000)
         
         if not self.is_running:
@@ -260,12 +265,12 @@ class My_Arm:
 
         if not self.is_running:
             return True
-        AK.setPitchRangeMoving((self.coordinate[self.detect_color][0], self.coordinate[self.detect_color][1], self.coordinate[self.detect_color][2] + 3), -90, -90, 0, 500)
+        self.AK.setPitchRangeMoving((self.coordinate[self.detect_color][0], self.coordinate[self.detect_color][1], self.coordinate[self.detect_color][2] + 3), -90, -90, 0, 500)
         time.sleep(0.5)
         
         if not self.is_running:
             return True
-        AK.setPitchRangeMoving((self.coordinate[self.detect_color]), -90, -90, 0, 1000)
+        self.AK.setPitchRangeMoving((self.coordinate[self.detect_color]), -90, -90, 0, 1000)
         time.sleep(0.8)
         
         if not self.is_running:
@@ -275,7 +280,7 @@ class My_Arm:
         
         if not self.is_running:
             return True                    
-        AK.setPitchRangeMoving((self.coordinate[self.detect_color][0], self.coordinate[self.detect_color][1], 12), -90, -90, 0, 800)
+        self.AK.setPitchRangeMoving((self.coordinate[self.detect_color][0], self.coordinate[self.detect_color][1], 12), -90, -90, 0, 800)
         time.sleep(0.8)
         return False
 
@@ -315,7 +320,7 @@ class My_Arm:
                     self.action_finish = False
                     self.set_color()
                     self.setBuzzer(0.1)
-                    result = AK.setPitchRangeMoving((self.world_X, self.world_Y - 2, 5), -90, -90, 0)
+                    result = self.AK.setPitchRangeMoving((self.world_X, self.world_Y - 2, 5), -90, -90, 0)
                     
                     self.check_unreachable(result)
                     time.sleep(result[2] / 1000)
@@ -327,7 +332,7 @@ class My_Arm:
                     if self.track:
                         if not self.is_running:
                             continue
-                        AK.setPitchRangeMoving((self.world_x, self.world_y - 2, 5), -90, -90, 0, 20)
+                        self.AK.setPitchRangeMoving((self.world_x, self.world_y - 2, 5), -90, -90, 0, 20)
                         time.sleep(0.02)
                         self.track = False
                     if self.start_pick_up:
@@ -366,7 +371,9 @@ class My_Arm:
                 img = cam.frame
                 if img is not None:
                     frame = img.copy()
+                    logging.debug("Entering do_perception")
                     Frame = self.do_perception(frame)
+                    logging.debug("Leaving do_perception")
                 
                     cv2.imshow("img", Frame)
                     key = cv2.waitKey(1)
