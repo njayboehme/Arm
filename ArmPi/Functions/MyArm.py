@@ -338,7 +338,6 @@ class My_Arm:
                         self.target_color = 'None'
                         self.first_move = True
 
-                        # TODO get_roi
                         self.get_roi = False 
                         self.action_finish = True
                         self.start_pick_up = False
