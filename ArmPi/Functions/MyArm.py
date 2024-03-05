@@ -13,6 +13,7 @@ from ArmIK.ArmMoveIK import *
 import HiwonderSDK.Board as Board
 from CameraCalibration.CalibrationConfig import *
 from ColorTracking import getAreaMaxContour
+from ColorTracking import setTargetColor
 
 logging_format = "%(asctime)s: %(message)s"
 logging.basicConfig(format=logging_format, level=logging.INFO,datefmt="%H:%M:%S")
@@ -20,7 +21,7 @@ logging.getLogger().setLevel(logging.DEBUG)# This is the file I will do all my c
 
 class My_Arm:
     def __init__(self):
-        self.target_color = 'red'
+        self.target_color = ()
         self.size = (640, 480)
         self.h = 0
         self.w = 0
@@ -90,14 +91,6 @@ class My_Arm:
         self.reset()
         self.is_running = True
 
-    def set_target_color(self, color):
-        if color == 'r':
-            self.target_color = 'red'
-        elif color == 'g':
-            self.target_color = 'green'
-        elif color == 'b':
-            self.target_color = 'blue'
-
     def setBuzzer(self, timer):
         Board.setBuzzer(0)
         Board.setBuzzer(1)
@@ -123,7 +116,8 @@ class My_Arm:
     def detect_target_color(self, img_lab):
         # color_range is a dict in LABConfig.py
         for i in color_range:
-            if i == self.target_color:
+            if i in self.target_color:
+                self.detect_color = i
                 frame_mask = self.threshold(img_lab)
                 closed_img = self.remove_noise(frame_mask)
                 return self.detect_outline(closed_img)
@@ -131,7 +125,7 @@ class My_Arm:
 
 
     def threshold(self, img_lab):
-        return cv2.inRange(img_lab, color_range[self.target_color][0], color_range[self.target_color][1])
+        return cv2.inRange(img_lab, color_range[self.detect_color][0], color_range[self.detect_color][1])
 
     def remove_noise(self, frame_mask):
         opened = cv2.morphologyEx(frame_mask, cv2.MORPH_OPEN, np.ones((6, 6), np.uint8))
@@ -152,9 +146,9 @@ class My_Arm:
         return convertCoordinate(img_cent_x, img_cent_y, self.size)
 
     def draw(self, img, world_x, world_y):
-        cv2.drawContours(img, [self.box], -1, self.range_rgb[self.target_color], 2)
+        cv2.drawContours(img, [self.box], -1, self.range_rgb[self.detect_color], 2)
         cv2.putText(img, '(' + str(world_x) + ',' + str(world_y) + ')', (min(self.box[0, 0], self.box[2, 0]), self.box[2, 1] - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, self.range_rgb[self.target_color], 1)
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, self.range_rgb[self.detect_color], 1)
         
 
     def do_perception(self, cam):
@@ -198,15 +192,15 @@ class My_Arm:
 
 
     def set_color(self):
-        if self.target_color == "red":
+        if self.detect_color == "red":
             Board.RGB.setPixelColor(0, Board.PixelColor(255, 0, 0))
             Board.RGB.setPixelColor(1, Board.PixelColor(255, 0, 0))
             Board.RGB.show()
-        elif self.target_color == "green":
+        elif self.detect_color == "green":
             Board.RGB.setPixelColor(0, Board.PixelColor(0, 255, 0))
             Board.RGB.setPixelColor(1, Board.PixelColor(0, 255, 0))
             Board.RGB.show()
-        elif self.target_color == "blue":
+        elif self.detect_color == "blue":
             Board.RGB.setPixelColor(0, Board.PixelColor(0, 0, 255))
             Board.RGB.setPixelColor(1, Board.PixelColor(0, 0, 255))
             Board.RGB.show()
@@ -251,23 +245,23 @@ class My_Arm:
         if not self.is_running:
             return True
         # 对不同颜色方块进行分类放置
-        result = AK.setPitchRangeMoving((self.coordinate[self.target_color][0], self.coordinate[self.target_color][1], 12), -90, -90, 0)   
+        result = AK.setPitchRangeMoving((self.coordinate[self.detect_color][0], self.coordinate[self.detect_color][1], 12), -90, -90, 0)   
         time.sleep(result[2]/1000)
         
         if not self.is_running:
             return True
-        servo2_angle = getAngle(self.coordinate[self.target_color][0], self.coordinate[self.target_color][1], -90)
+        servo2_angle = getAngle(self.coordinate[self.detect_color][0], self.coordinate[self.detect_color][1], -90)
         Board.setBusServoPulse(2, servo2_angle, 500)
         time.sleep(0.5)
 
         if not self.is_running:
             return True
-        AK.setPitchRangeMoving((self.coordinate[self.target_color][0], self.coordinate[self.target_color][1], self.coordinate[self.target_color][2] + 3), -90, -90, 0, 500)
+        AK.setPitchRangeMoving((self.coordinate[self.detect_color][0], self.coordinate[self.detect_color][1], self.coordinate[self.detect_color][2] + 3), -90, -90, 0, 500)
         time.sleep(0.5)
         
         if not self.is_running:
             return True
-        AK.setPitchRangeMoving((self.coordinate[self.target_color]), -90, -90, 0, 1000)
+        AK.setPitchRangeMoving((self.coordinate[self.detect_color]), -90, -90, 0, 1000)
         time.sleep(0.8)
         
         if not self.is_running:
@@ -277,7 +271,7 @@ class My_Arm:
         
         if not self.is_running:
             return True                    
-        AK.setPitchRangeMoving((self.coordinate[self.target_color][0], self.coordinate[self.target_color][1], 12), -90, -90, 0, 800)
+        AK.setPitchRangeMoving((self.coordinate[self.detect_color][0], self.coordinate[self.detect_color][1], 12), -90, -90, 0, 800)
         time.sleep(0.8)
         return False
 
@@ -335,13 +329,13 @@ class My_Arm:
                         self.init()
                         time.sleep(1.5)
 
-                        self.target_color = 'None'
+                        self.detect_color = 'None'
                         self.first_move = True
 
                         self.get_roi = False 
                         self.action_finish = True
                         self.start_pick_up = False
-                        self.set_target_color()
+                        self.set_color()
                     else:
                         time.sleep(0.01)
             else:
@@ -355,6 +349,7 @@ class My_Arm:
         self.start_move_thread()
         self.init()
         self.start()
+        self.target_color = ('red', )
         cam = Camera.Camera()
         cam.camera_open()
         while True:
