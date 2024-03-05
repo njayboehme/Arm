@@ -359,7 +359,7 @@ class My_Arm:
             img = cam.frame
             if img is not None:
                 frame = img.copy
-                Frame = self.do_perception(cam)
+                Frame = self.do_perception(frame)
             
                 cv2.imshow("img", Frame)
                 key = cv2.waitKey(1)
