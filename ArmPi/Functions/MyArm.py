@@ -153,7 +153,9 @@ class My_Arm:
         
 
     def do_perception(self, img):
+        logging.debug(f"input image is type {type(img)}")
         img_copy = self.get_image(img)
+        logging.debug(f"copied image is type {type(img_copy)}")
         cv2.line(img, (0, int(self.h / 2)), (self.w, int(self.h / 2)), (0, 0, 200), 1)
         cv2.line(img, (int(self.w / 2), 0), (int(self.w / 2), self.h), (0, 0, 200), 1)
     
@@ -164,6 +166,7 @@ class My_Arm:
         logging.debug("Leaving resize_and_smooth")
         area_max = 0
         area_max_cont = 0
+        logging.debug(f"start_pick_up is {self.start_pick_up}")
         if not self.start_pick_up:
             logging.debug('Entering detect_target_color')
             area_max_cont, area_max = self.detect_target_color(lab_img)
@@ -366,21 +369,18 @@ class My_Arm:
         self.target_color = ('red', )
         cam = Camera.Camera()
         cam.camera_open()
-        try:
-            while True:
-                img = cam.frame
-                if img is not None:
-                    frame = img.copy()
-                    logging.debug("Entering do_perception")
-                    Frame = self.do_perception(frame)
-                    logging.debug("Leaving do_perception")
-                
-                    cv2.imshow("img", Frame)
-                    key = cv2.waitKey(1)
-                    if key == 27:
-                        break
-        except Exception as e:
-            logging.error(traceback.format_exc())
+        while True:
+            img = cam.frame
+            if img is not None:
+                frame = img.copy()
+                logging.debug("Entering do_perception")
+                Frame = self.do_perception(frame)
+                logging.debug("Leaving do_perception")
+            
+                cv2.imshow("img", Frame)
+                key = cv2.waitKey(1)
+                if key == 27:
+                    break
         cam.camera_close()
         cv2.destroyAllWindows()
 
