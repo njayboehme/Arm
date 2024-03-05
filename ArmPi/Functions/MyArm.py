@@ -300,6 +300,11 @@ class My_Arm:
                     self.count = 0
                     self.center_list = []
                     self.start_pick_up = True
+            else:
+                self.t1 = time.time()
+                self.start_count_t1 = True
+                self.count = 0
+                self.center_list = []
 
     # This runs all the code for the movement of the arm
     def move(self):
