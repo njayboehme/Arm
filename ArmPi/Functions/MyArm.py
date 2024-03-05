@@ -360,9 +360,9 @@ class My_Arm:
         while True:
             img = cam.frame
             if img is not None:
-                frame = self.do_perception(cam)
+                img = self.do_perception(cam)
             
-            cv2.imshow("img", frame)
+            cv2.imshow("img", img)
             key = cv2.waitKey(1)
             if key == 27:
                 break
