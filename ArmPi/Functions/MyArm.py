@@ -349,7 +349,7 @@ class My_Arm:
 
 
     def run(self):
-        self.start_move_thread()
+        # self.start_move_thread()
         self.init()
         self.start()
         self.target_color = ('red', )
