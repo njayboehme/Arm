@@ -21,7 +21,6 @@ logging.getLogger().setLevel(logging.DEBUG)# This is the file I will do all my c
 class My_Arm:
     def __init__(self):
         self.target_color = 'red'
-        self.start_pickup = False
         self.size = (640, 480)
         self.h = 0
         self.w = 0
@@ -35,14 +34,57 @@ class My_Arm:
                         'white': (255, 255, 255),
                         }
         self.AK = ArmIK()
+
+        # For moving arm
+        self.count = 0
+        self.track = False
+        self._stop = False
+        self.get_roi = False
+        self.center_list = []
+        self.first_move = True
+        self.detect_color = 'None'
+        self.action_finish = True
+        self.start_pick_up = False
+        self.start_count_t1 = True
         
+        self.t1 = 0
+        self.roi = ()
+        self.rect = None
+        self.rotation_angle = 0
+        self.unreachable = False
+
+        self.world_X = 0
+        self.world_Y = 0
+
+        self.world_x = 0
+        self.world_y = 0
+
+        self.last_x = 0
+        self.last_y = 0
+        self.coordinate = {
+                            'red':   (-15 + 0.5, 12 - 0.5, 1.5),
+                            'green': (-15 + 0.5, 6 - 0.5,  1.5),
+                            'blue':  (-15 + 0.5, 0 - 0.5,  1.5),
+                          }
+
+    # General Functions
     def init(self):
         Board.setBusServoPulse(1, self.servo_1 - 50, 300)
         Board.setBusServoPulse(2, 500, 500)
         self.AK.setPitchRangeMoving((0, 10, 10), -30, -30, -90, 1500)
 
     def reset(self):
-        self.start_pickup = False
+        self.start_pick_up = False
+        self.count = 0
+        self._stop = False
+        self.track = False
+        self.get_roi = False
+        self.center_list = []
+        self.first_move = True
+        self.target_color = ()
+        self.detect_color = 'None'
+        self.action_finish = True
+        self.start_count_t1 = True
 
     def start(self):
         self.reset()
@@ -53,9 +95,17 @@ class My_Arm:
             self.target_color = 'red'
         elif color == 'g':
             self.target_color = 'green'
-        else:
+        elif color == 'b':
             self.target_color = 'blue'
 
+    def setBuzzer(self, timer):
+        Board.setBuzzer(0)
+        Board.setBuzzer(1)
+        time.sleep(timer)
+        Board.setBuzzer(0)
+
+
+    # Perception Code
     def get_image(self, cam):
         img = cam.frame
         self.h = img.shape[0]
@@ -65,6 +115,9 @@ class My_Arm:
     def resize_and_smooth(self, img):
         img_resize = cv2.resize(img, self.size, interpolation=cv2.INTER_NEAREST)
         img_gb = cv2.GaussianBlur(img_resize, (11, 11), 11)
+        if self.get_roi and self.start_pick_up:
+            self.get_roi = False
+            img_gb = getMaskROI(img_gb, self.roi, self.size)
         return cv2.cvtColor(img_gb, cv2.COLOR_BGR2LAB)
 
     def detect_target_color(self, img_lab):
@@ -90,50 +143,230 @@ class My_Arm:
         return getAreaMaxContour(contours)
 
     def detect_box(self, area_max_cont):
-        rect = cv2.minAreaRect(area_max_cont)
-        box = np.int0(cv2.boxPoints(rect))
+        self.rect = cv2.minAreaRect(area_max_cont)
+        box = np.int0(cv2.boxPoints(self.rect))
         self.box = box
-        roi = getROI(box)
-        img_cent_x, img_cent_y = getCenter(rect, roi, self.size, square_length)
+        self.roi = getROI(box)
+        self.get_roi = True
+        img_cent_x, img_cent_y = getCenter(self.rect, self.roi, self.size, square_length)
         return convertCoordinate(img_cent_x, img_cent_y, self.size)
-
-    def pick_up(self):
-        pass
 
     def draw(self, img, world_x, world_y):
         cv2.drawContours(img, [self.box], -1, self.range_rgb[self.target_color], 2)
         cv2.putText(img, '(' + str(world_x) + ',' + str(world_y) + ')', (min(self.box[0, 0], self.box[2, 0]), self.box[2, 1] - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, self.range_rgb[self.target_color], 1)
+        
 
-    def run(self):
-        # Need to run init and start
-        logging.debug("Init")
-        self.init()
-        logging.debug("Start")
-        self.start()
-        logging.debug("Opening camera")
-        cam = Camera.Camera()
-        cam.camera_open()
+    def do_perception(self, cam):
+        img = self.get_image(cam)
         if not self.is_running:
-            logging.error("Not Running!!")
-            return None
-        while input("Press q to quit ") != 'q':
-            inp = input("What color to detect (r, g, b)? ")
-            logging.debug(f'Setting target value to {inp}')
-            self.set_target_color(inp)
-            logging.debug("Getting img")
-            img = self.get_image(cam)
-            logging.debug("Resizing and smoothing")
-            lab_img = self.resize_and_smooth(img)
-            logging.debug("detecting target color")
+            return img
+        
+        lab_img = self.resize_and_smooth(img)
+        area_max = 0
+        area_max_cont = 0
+        if not self.start_pick_up:
             area_max_cont, area_max = self.detect_target_color(lab_img)
             if area_max > 2500:
-                logging.debug("detecting box")
-                world_x, world_y = self.detect_box(area_max_cont)
-                logging.debug("Drawing")
-                self.draw(img, world_x, world_y)
-            cv2.imshow("img", img)
-            cv2.waitKey(1)
+                self.world_x, self.world_y = self.detect_box(area_max_cont)
+                self.draw(img, self.world_x, self.world_y)
+
+                distance = math.sqrt(pow(self.world_x - self.last_x, 2) + pow(self.world_y - self.last_y, 2)) #对比上次坐标来判断是否移动
+                self.last_x, self.last_y = self.world_x, self.world_y
+                self.track = True
+                self.action_finish(distance)
+        return img
+
+        
+
+    # All the functions below here are used for arm movement (except run, which is for everything)
+        
+    def start_move_thread(self):
+        th = threading.Thread(target=self.move)
+        th.setDaemon(True)
+        th.start
+    
+    
+    def stop(self):
+        self._stop = True
+        self.is_running = True
+
+    
+    def exit(self):
+        self._stop = True
+        self.is_running = False
+
+
+    def set_color(self):
+        if self.target_color == "red":
+            Board.RGB.setPixelColor(0, Board.PixelColor(255, 0, 0))
+            Board.RGB.setPixelColor(1, Board.PixelColor(255, 0, 0))
+            Board.RGB.show()
+        elif self.target_color == "green":
+            Board.RGB.setPixelColor(0, Board.PixelColor(0, 255, 0))
+            Board.RGB.setPixelColor(1, Board.PixelColor(0, 255, 0))
+            Board.RGB.show()
+        elif self.target_color == "blue":
+            Board.RGB.setPixelColor(0, Board.PixelColor(0, 0, 255))
+            Board.RGB.setPixelColor(1, Board.PixelColor(0, 0, 255))
+            Board.RGB.show()
+        else:
+            Board.RGB.setPixelColor(0, Board.PixelColor(0, 0, 0))
+            Board.RGB.setPixelColor(1, Board.PixelColor(0, 0, 0))
+            Board.RGB.show()
+
+    def reset_arm_position(self):
+        Board.setBusServoPulse(1, self.servo_1 - 70, 300)
+        time.sleep(0.5)
+        Board.setBusServoPulse(2, 500, 500)
+        AK.setPitchRangeMoving((0, 10, 10), -30, -30, -90, 1500)
+        time.sleep(1.5)
+
+    def move_arm(self):
+
+        if not self.is_running: # 停止以及退出标志位检测
+            return True
+        Board.setBusServoPulse(1, self.servo_1 - 280, 500)  # 爪子张开
+        # 计算夹持器需要旋转的角度
+        servo2_angle = getAngle(self.world_X, self.world_Y, self.rotation_angle)
+        Board.setBusServoPulse(2, servo2_angle, 500)
+        time.sleep(0.8)
+        
+        if not self.is_running:
+            return True
+        AK.setPitchRangeMoving((self.world_X, self.world_Y, 2), -90, -90, 0, 1000)  # 降低高度
+        time.sleep(2)
+        
+        if not self.is_running:
+            return True
+        Board.setBusServoPulse(1, self.servo_1, 500)  # 夹持器闭合
+        time.sleep(1)
+        
+        if not self.is_running:
+            return True
+        Board.setBusServoPulse(2, 500, 500)
+        AK.setPitchRangeMoving((self.world_X, self.world_Y, 12), -90, -90, 0, 1000)  # 机械臂抬起
+        time.sleep(1)
+        
+        if not self.is_running:
+            return True
+        # 对不同颜色方块进行分类放置
+        result = AK.setPitchRangeMoving((self.coordinate[self.target_color][0], self.coordinate[self.target_color][1], 12), -90, -90, 0)   
+        time.sleep(result[2]/1000)
+        
+        if not self.is_running:
+            return True
+        servo2_angle = getAngle(self.coordinate[self.target_color][0], self.coordinate[self.target_color][1], -90)
+        Board.setBusServoPulse(2, servo2_angle, 500)
+        time.sleep(0.5)
+
+        if not self.is_running:
+            return True
+        AK.setPitchRangeMoving((self.coordinate[self.target_color][0], self.coordinate[self.target_color][1], self.coordinate[self.target_color][2] + 3), -90, -90, 0, 500)
+        time.sleep(0.5)
+        
+        if not self.is_running:
+            return True
+        AK.setPitchRangeMoving((self.coordinate[self.target_color]), -90, -90, 0, 1000)
+        time.sleep(0.8)
+        
+        if not self.is_running:
+            return True
+        Board.setBusServoPulse(1, self.servo_1 - 200, 500)
+        time.sleep(0.8)
+        
+        if not self.is_running:
+            return True                    
+        AK.setPitchRangeMoving((self.coordinate[self.target_color][0], self.coordinate[self.target_color][1], 12), -90, -90, 0, 800)
+        time.sleep(0.8)
+        return False
+
+    def check_unreachable(self, result):
+        if result == False:
+            self.unreachable = True
+        else:
+            self.unreachable = False
+
+    def finish_move(self, distance):
+        if self.action_finish:
+            if distance < 0.3:
+                self.center_list.extend((self.world_x, self.world_y))
+                self.count += 1
+
+                if self.start_count_t1:
+                    self.start_count_t1 = False
+                    self.t1 = time.time()
+                if time.time() - self.t1 > 1.5:
+                    self.rotation_angle = self.rect[2]
+                    self.start_count_t1 = True
+                    self.world_X, self.world_Y = np.mean(np.array(self.center_list).reshape(self.count, 2), axis=0)
+                    self.count = 0
+                    self.center_list = []
+                    self.start_pick_up = True
+
+    # This runs all the code for the movement of the arm
+    def move(self):
+        while True:
+            if self.is_running:
+                if self.first_move and self.start_pick_up:
+                    self.action_finish = False
+                    self.set_color()
+                    self.setBuzzer(0.1)
+                    result = AK.setPitchRangeMoving((self.world_X, self.world_Y - 2, 5), -90, -90, 0)
+                    
+                    self.check_unreachable(result)
+                    time.sleep(result[2] / 1000)
+                    self.start_pick_up = False
+                    self.first_move = False
+                    self.action_finish = True
+                elif not self.first_move and not self.unreachable:
+                    self.set_color()
+                    if self.track:
+                        if not self.is_running:
+                            continue
+                        AK.setPitchRangeMoving((self.world_x, self.world_y - 2, 5), -90, -90, 0, 20)
+                        time.sleep(0.02)
+                        self.track = False
+                    if self.start_pick_up:
+                        self.action_finish = False
+                        if self.move_arm():
+                            continue
+
+                        self.init()
+                        time.sleep(1.5)
+
+                        self.target_color = 'None'
+                        self.first_move = True
+
+                        # TODO get_roi
+                        self.get_roi = False 
+                        self.action_finish = True
+                        self.start_pick_up = False
+                        self.set_target_color()
+                    else:
+                        time.sleep(0.01)
+            else:
+                if self._stop:
+                    self._stop = False
+                    self.reset_arm_position()
+                time.sleep(0.01)
+
+
+    def run(self):
+        self.start_move_thread()
+        self.init()
+        self.start()
+        cam = Camera.Camera()
+        cam.camera_open()
+        while True:
+            img = cam.frame
+            if img is not None:
+                frame = self.do_perception(cam)
+            
+            cv2.imshow("img", frame)
+            key = cv2.waitKey(1)
+            if key == 27:
+                break
         cam.camera_close()
         cv2.destroyAllWindows()
 
