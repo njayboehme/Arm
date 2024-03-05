@@ -320,6 +320,7 @@ class My_Arm:
         while True:
             if self.is_running:
                 if self.first_move and self.start_pick_up:
+                    logging.debug("first_move and start_pick_up")
                     self.action_finish = False
                     self.set_color()
                     self.setBuzzer(0.1)
@@ -331,6 +332,7 @@ class My_Arm:
                     self.first_move = False
                     self.action_finish = True
                 elif not self.first_move and not self.unreachable:
+                    logging.debug("not first_move and not unreachable")
                     self.set_color()
                     if self.track:
                         if not self.is_running:
@@ -354,8 +356,10 @@ class My_Arm:
                         self.start_pick_up = False
                         self.set_color()
                     else:
+                        logging.debug('time to sleep 0.01')
                         time.sleep(0.01)
             else:
+                logging.debug('else statement')
                 if self._stop:
                     self._stop = False
                     self.reset_arm_position()
