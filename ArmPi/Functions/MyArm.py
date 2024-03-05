@@ -99,11 +99,11 @@ class My_Arm:
 
 
     # Perception Code
-    def get_image(self, cam):
-        img = cam.frame
+    def get_image(self, img):
+        copy_img = img.copy()
         self.h = img.shape[0]
         self.w = img.shape[1]
-        return img
+        return copy_img
 
     def resize_and_smooth(self, img):
         img_resize = cv2.resize(img, self.size, interpolation=cv2.INTER_NEAREST)
@@ -151,12 +151,15 @@ class My_Arm:
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, self.range_rgb[self.detect_color], 1)
         
 
-    def do_perception(self, cam):
-        img = self.get_image(cam)
+    def do_perception(self, img):
+        img_copy = self.get_image(img)
+        cv2.line(img, (0, int(self.h / 2)), (self.w, int(self.h / 2)), (0, 0, 200), 1)
+        cv2.line(img, (int(self.w / 2), 0), (int(self.w / 2), self.h), (0, 0, 200), 1)
+    
         if not self.is_running:
             return img
         
-        lab_img = self.resize_and_smooth(img)
+        lab_img = self.resize_and_smooth(img_copy)
         area_max = 0
         area_max_cont = 0
         if not self.start_pick_up:
@@ -355,9 +358,10 @@ class My_Arm:
         while True:
             img = cam.frame
             if img is not None:
-                img = self.do_perception(cam)
+                frame = img.copy
+                Frame = self.do_perception(cam)
             
-                cv2.imshow("img", img)
+                cv2.imshow("img", Frame)
                 key = cv2.waitKey(1)
                 if key == 27:
                     break
