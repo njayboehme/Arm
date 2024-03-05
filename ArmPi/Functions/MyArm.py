@@ -168,7 +168,7 @@ class My_Arm:
                 distance = math.sqrt(pow(self.world_x - self.last_x, 2) + pow(self.world_y - self.last_y, 2)) #对比上次坐标来判断是否移动
                 self.last_x, self.last_y = self.world_x, self.world_y
                 self.track = True
-                self.action_finish(distance)
+                self.finish_move(distance)
         return img
 
         
