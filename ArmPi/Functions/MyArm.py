@@ -190,7 +190,7 @@ class My_Arm:
     def start_move_thread(self):
         th = threading.Thread(target=self.move)
         th.setDaemon(True)
-        th.start
+        th.start()
     
     
     def stop(self):
