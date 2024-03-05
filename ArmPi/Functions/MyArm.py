@@ -3,6 +3,7 @@
 import sys
 sys.path.append('/home/pi/ArmPi/')
 import logging
+import traceback
 import cv2
 import time
 import Camera
@@ -360,16 +361,19 @@ class My_Arm:
         self.target_color = ('red', )
         cam = Camera.Camera()
         cam.camera_open()
-        while True:
-            img = cam.frame
-            if img is not None:
-                frame = img.copy()
-                Frame = self.do_perception(frame)
-            
-                cv2.imshow("img", Frame)
-                key = cv2.waitKey(1)
-                if key == 27:
-                    break
+        try:
+            while True:
+                img = cam.frame
+                if img is not None:
+                    frame = img.copy()
+                    Frame = self.do_perception(frame)
+                
+                    cv2.imshow("img", Frame)
+                    key = cv2.waitKey(1)
+                    if key == 27:
+                        break
+        except Exception as e:
+            logging.error(traceback.format_exc())
         cam.camera_close()
         cv2.destroyAllWindows()
 
