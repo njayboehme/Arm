@@ -358,7 +358,7 @@ class My_Arm:
         while True:
             img = cam.frame
             if img is not None:
-                frame = img.copy
+                frame = img.copy()
                 Frame = self.do_perception(frame)
             
                 cv2.imshow("img", Frame)
