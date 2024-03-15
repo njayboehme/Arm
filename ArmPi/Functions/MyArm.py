@@ -156,6 +156,7 @@ class My_Arm:
         img_lab = self.resize_and_smooth(img)
         area_max_cont, area_max = self.detect_target_color(img_lab)
         if area_max > self.bull_close:
+            print(area_max)
             self.bull_close = True
             if area_max_cont is not None:
                 world_x, world_y = self.detect_box(area_max_cont)
