@@ -160,6 +160,7 @@ class My_Arm:
             self.setBuzzer(0.1)
         else:
             self.bull_close = False
+        return img
 
     def draw(self, img, world_x, world_y):
         cv2.drawContours(img, [self.box], -1, self.range_rgb[self.detect_color], 2)
