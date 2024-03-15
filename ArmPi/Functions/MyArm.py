@@ -157,7 +157,9 @@ class My_Arm:
         area_max_cont, area_max = self.detect_target_color(img_lab)
         if area_max > self.bull_close:
             self.bull_close = True
-            self.setBuzzer(0.1)
+            world_x, world_y = self.detect_box(area_max_cont)
+            self.draw(img, world_x, world_y)
+            # self.setBuzzer(0.1)
         else:
             self.bull_close = False
         return img
