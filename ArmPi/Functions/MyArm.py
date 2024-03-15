@@ -157,6 +157,7 @@ class My_Arm:
         area_max_cont, area_max = self.detect_target_color(img_lab)
         if area_max > self.bull_close:
             print(area_max)
+            print(self.bull_close)
             self.bull_close = True
             if area_max_cont is not None:
                 world_x, world_y = self.detect_box(area_max_cont)
@@ -431,7 +432,8 @@ class My_Arm:
 
 
 if __name__ == '__main__':
-    area_max = float(input("Enter area size to detect bull"))
+    area_max = float(input("Enter area size to detect bull "))
+    print(area_max)
     arm = My_Arm()
     arm.bull_close = area_max
     # arm.run()
