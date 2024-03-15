@@ -18,15 +18,10 @@ from ColorTracking import setTargetColor
 
 logging_format = "%(asctime)s: %(message)s"
 logging.basicConfig(format=logging_format, level=logging.INFO,datefmt="%H:%M:%S")
-logging.getLogger().setLevel(logging.DEBUG)# This is the file I will do all my code in
+logging.getLogger().setLevel(logging.ERROR)# This is the file I will do all my code in
 
 class My_Arm:
     def __init__(self):
-        # For Bull
-        self.bull_close = 3000
-        self.bull_detected = False
-
-
         self.target_color = ()
         self.size = (640, 480)
         self.h = 0
@@ -43,9 +38,6 @@ class My_Arm:
         self.AK = ArmIK()
 
         # For moving arm
-        self.init_position = (0,20,15)
-        self.raised_position = (0, 15, 25)
-        
         self.count = 0
         self.track = False
         self._stop = False
@@ -56,6 +48,11 @@ class My_Arm:
         self.action_finish = True
         self.start_pick_up = False
         self.start_count_t1 = True
+        
+        # For Bull
+        self.bull_close = 3000
+        self.bull_detected = False
+        self.raise_started=False
         
         self.t1 = 0
         self.roi = ()
@@ -76,6 +73,8 @@ class My_Arm:
                             'green': (-15 + 0.5, 6 - 0.5,  1.5),
                             'blue':  (-15 + 0.5, 0 - 0.5,  1.5),
                           }
+        self.init_position = (0,20,15)
+        self.raised_position = (0, 15, 25)
 
     # General Functions
     def init(self):
@@ -95,7 +94,6 @@ class My_Arm:
         self.detect_color = 'None'
         self.action_finish = True
         self.start_count_t1 = True
-        self.bull_detected = False
 
     def start(self):
         self.reset()
@@ -132,7 +130,19 @@ class My_Arm:
                 closed_img = self.remove_noise(frame_mask)
                 return self.detect_outline(closed_img)
         return 0, 0
-
+    
+    def detect_bull(self, img):
+        img_lab = self.resize_and_smooth(img)
+        area_max_cont, area_max = self.detect_target_color(img_lab)
+        if area_max > self.bull_close:
+            self.bull_detected = True
+            if area_max_cont is not None:
+                world_x, world_y = self.detect_box(area_max_cont)
+                self.draw(img, world_x, world_y)
+            # self.setBuzzer(0.1)
+        else:
+            self.bull_detected = False
+        return img
 
     def threshold(self, img_lab):
         return cv2.inRange(img_lab, color_range[self.detect_color][0], color_range[self.detect_color][1])
@@ -154,25 +164,11 @@ class My_Arm:
         self.get_roi = True
         img_cent_x, img_cent_y = getCenter(self.rect, self.roi, self.size, square_length)
         return convertCoordinate(img_cent_x, img_cent_y, self.size)
-    
-    def detect_bull(self, img):
-        img_lab = self.resize_and_smooth(img)
-        area_max_cont, area_max = self.detect_target_color(img_lab)
-        if area_max > self.bull_close:
-            self.bull_detected = True
-            if area_max_cont is not None:
-                world_x, world_y = self.detect_box(area_max_cont)
-                self.draw(img, world_x, world_y)
-            # self.setBuzzer(0.1)
-        else:
-            self.bull_detected = False
-        return img
 
     def draw(self, img, world_x, world_y):
         cv2.drawContours(img, [self.box], -1, self.range_rgb[self.detect_color], 2)
         cv2.putText(img, '(' + str(world_x) + ',' + str(world_y) + ')', (min(self.box[0, 0], self.box[2, 0]), self.box[2, 1] - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, self.range_rgb[self.detect_color], 1)
-        
 
     def do_perception(self, img):
         logging.debug(f"input image is type {type(img)}")
@@ -193,7 +189,8 @@ class My_Arm:
             logging.debug('Entering detect_target_color')
             area_max_cont, area_max = self.detect_target_color(lab_img)
             if area_max > 2500:
-                logging.debug('Entering detect_box')
+                logging.debug('BULL DETECTED')
+                self.bull_detected = True
                 self.world_x, self.world_y = self.detect_box(area_max_cont)
                 logging.debug('About to draw')
                 self.draw(img, self.world_x, self.world_y)
@@ -202,10 +199,33 @@ class My_Arm:
                 self.last_x, self.last_y = self.world_x, self.world_y
                 self.track = True
                 logging.debug('Entering finish_move')
-                self.finish_move(distance)
+                self.finish_processing(distance)
+            else:
+                self.bull_detected = False
         return img
+    
+    def finish_processing(self, distance):
+        if self.action_finish:
+            if distance < 0.3:
+                self.center_list.extend((self.world_x, self.world_y))
+                self.count += 1
 
-        
+                if self.start_count_t1:
+                    self.start_count_t1 = False
+                    self.t1 = time.time()
+                if time.time() - self.t1 > 1.5:
+                    self.rotation_angle = self.rect[2]
+                    self.start_count_t1 = True
+                    self.world_X, self.world_Y = np.mean(np.array(self.center_list).reshape(self.count, 2), axis=0)
+                    self.count = 0
+                    self.center_list = []
+                    self.start_pick_up = True
+            else:
+                self.t1 = time.time()
+                self.start_count_t1 = True
+                self.count = 0
+                self.center_list = []
+    
 
     # All the functions below here are used for arm movement (except run, which is for everything)
         
@@ -214,16 +234,13 @@ class My_Arm:
         th.setDaemon(True)
         th.start()
     
-    
     def stop(self):
         self._stop = True
         self.is_running = True
 
-    
     def exit(self):
         self._stop = True
         self.is_running = False
-
 
     def set_color(self):
         if self.detect_color == "red":
@@ -247,67 +264,8 @@ class My_Arm:
         Board.setBusServoPulse(1, self.servo_1 - 70, 300)
         time.sleep(0.5)
         Board.setBusServoPulse(2, 500, 500)
-        self.AK.setPitchRangeMoving((0, 10, 10), -30, -30, -90, 1500)
-        time.sleep(1.5)
-
-    def move_arm(self):
-
-        if not self.is_running: # 停止以及退出标志位检测
-            return True
-        Board.setBusServoPulse(1, self.servo_1 - 280, 500)  # 爪子张开
-        # 计算夹持器需要旋转的角度
-        servo2_angle = getAngle(self.world_X, self.world_Y, self.rotation_angle)
-        Board.setBusServoPulse(2, servo2_angle, 500)
-        time.sleep(0.8)
-        
-        if not self.is_running:
-            return True
-        self.AK.setPitchRangeMoving((self.world_X, self.world_Y, 2), -90, -90, 0, 1000)  # 降低高度
-        time.sleep(2)
-        
-        if not self.is_running:
-            return True
-        Board.setBusServoPulse(1, self.servo_1, 500)  # 夹持器闭合
-        time.sleep(1)
-        
-        if not self.is_running:
-            return True
-        Board.setBusServoPulse(2, 500, 500)
-        self.AK.setPitchRangeMoving((self.world_X, self.world_Y, 12), -90, -90, 0, 1000)  # 机械臂抬起
-        time.sleep(1)
-        
-        if not self.is_running:
-            return True
-        # 对不同颜色方块进行分类放置
-        result = self.AK.setPitchRangeMoving((self.coordinate[self.detect_color][0], self.coordinate[self.detect_color][1], 12), -90, -90, 0)   
-        time.sleep(result[2]/1000)
-        
-        if not self.is_running:
-            return True
-        servo2_angle = getAngle(self.coordinate[self.detect_color][0], self.coordinate[self.detect_color][1], -90)
-        Board.setBusServoPulse(2, servo2_angle, 500)
-        time.sleep(0.5)
-
-        if not self.is_running:
-            return True
-        self.AK.setPitchRangeMoving((self.coordinate[self.detect_color][0], self.coordinate[self.detect_color][1], self.coordinate[self.detect_color][2] + 3), -90, -90, 0, 500)
-        time.sleep(0.5)
-        
-        if not self.is_running:
-            return True
-        self.AK.setPitchRangeMoving((self.coordinate[self.detect_color]), -90, -90, 0, 1000)
-        time.sleep(0.8)
-        
-        if not self.is_running:
-            return True
-        Board.setBusServoPulse(1, self.servo_1 - 200, 500)
-        time.sleep(0.8)
-        
-        if not self.is_running:
-            return True                    
-        self.AK.setPitchRangeMoving((self.coordinate[self.detect_color][0], self.coordinate[self.detect_color][1], 12), -90, -90, 0, 800)
-        time.sleep(0.8)
-        return False
+        self.AK.setPitchRangeMoving(self.init_position, -30, -30, -90, 500)
+        time.sleep(1.0)
 
     def check_unreachable(self, result):
         if result == False:
@@ -315,78 +273,38 @@ class My_Arm:
         else:
             self.unreachable = False
 
-    def finish_move(self, distance):
-        if self.action_finish:
-            if distance < 0.3:
-                self.center_list.extend((self.world_x, self.world_y))
-                self.count += 1
-
-                if self.start_count_t1:
-                    self.start_count_t1 = False
-                    self.t1 = time.time()
-                if time.time() - self.t1 > 1.5:
-                    self.rotation_angle = self.rect[2]
-                    self.start_count_t1 = True
-                    self.world_X, self.world_Y = np.mean(np.array(self.center_list).reshape(self.count, 2), axis=0)
-                    self.count = 0
-                    self.center_list = []
-                    self.start_pick_up = True
-            else:
-                self.t1 = time.time()
-                self.start_count_t1 = True
-                self.count = 0
-                self.center_list = []
-
     # This runs all the code for the movement of the arm
     def move(self):
         while True:
             if self.is_running:
-                if self.first_move and self.start_pick_up:
-                    logging.debug("first_move and start_pick_up")
-                    self.action_finish = False
+                if self.bull_detected:
+                    logging.debug('Raising cape')
                     self.set_color()
-                    self.setBuzzer(0.1)
-                    result = self.AK.setPitchRangeMoving((self.world_X, self.world_Y - 2, 5), -90, -90, 0)
+                    #self.setBuzzer(0.1)
                     
-                    self.check_unreachable(result)
-                    time.sleep(result[2] / 1000)
-                    self.start_pick_up = False
-                    self.first_move = False
-                    self.action_finish = True
-                elif not self.first_move and not self.unreachable:
-                    logging.debug("not first_move and not unreachable")
-                    self.set_color()
-                    if self.track:
-                        if not self.is_running:
-                            continue
-                        self.AK.setPitchRangeMoving((self.world_x, self.world_y - 2, 5), -90, -90, 0, 20)
-                        time.sleep(0.02)
-                        self.track = False
-                    if self.start_pick_up:
-                        self.action_finish = False
-                        if self.move_arm():
-                            continue
-
-                        self.init()
-                        time.sleep(1.5)
-
-                        self.detect_color = 'None'
-                        self.first_move = True
-
-                        self.get_roi = False 
-                        self.action_finish = True
-                        self.start_pick_up = False
-                        self.set_color()
-                    else:
-                        logging.debug('time to sleep 0.01')
-                        time.sleep(0.01)
+                    # command arm raise
+                    if not self.raise_started:
+                        if not self.is_running: continue
+                        self.AK.setPitchRangeMoving(self.raised_position, -90, -90, 0, movetime=250)
+                        self.raise_started=True
+                    #time.sleep(0.02)
+                
+                else:
+                    logging.debug('No bull, lowering cape')
+                    
+                    # command arm lower
+                    self.reset_arm_position()
+                    self.raise_started=False
+                    #time.sleep(0.01)
+                    
             else:
-                logging.debug('else statement')
+                logging.debug('Not running, resetting')
                 if self._stop:
                     self._stop = False
+                    
+                    # command arm lower
                     self.reset_arm_position()
                 time.sleep(0.01)
-
 
     def run(self):
         self.start_move_thread()
@@ -400,7 +318,7 @@ class My_Arm:
             if img is not None:
                 frame = img.copy()
                 logging.debug("Entering do_perception")
-                Frame = self.do_perception(frame)
+                Frame = self.detect_bull(frame)
                 logging.debug("Leaving do_perception")
             
                 cv2.imshow("img", Frame)
@@ -411,30 +329,8 @@ class My_Arm:
         cv2.destroyAllWindows()
 
 
-    def test(self):
-        self.init()
-        self.start()
-        self.target_color = ('red', )
-        cam = Camera.Camera()
-        cam.camera_open()
-        while True:
-            img = cam.frame
-            if img is not None:
-                frame = img.copy()
-                Frame = self.detect_bull(frame)
-            
-                cv2.imshow("img", Frame)
-                key = cv2.waitKey(1)
-                if key == 27:
-                    break
-        cam.camera_close()
-        cv2.destroyAllWindows()
-
 
 
 if __name__ == '__main__':
-    area_max = float(input("Enter area size to detect bull "))
     arm = My_Arm()
-    arm.bull_close = area_max
-    # arm.run()
-    arm.test()
+    arm.run()
