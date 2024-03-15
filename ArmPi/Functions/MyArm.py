@@ -158,13 +158,13 @@ class My_Arm:
         if area_max > self.bull_close:
             print(area_max)
             print(self.bull_close)
-            self.bull_close = True
+            self.bull_detected = True
             if area_max_cont is not None:
                 world_x, world_y = self.detect_box(area_max_cont)
                 self.draw(img, world_x, world_y)
             # self.setBuzzer(0.1)
         else:
-            self.bull_close = False
+            self.bull_detected = False
         return img
 
     def draw(self, img, world_x, world_y):
