@@ -430,6 +430,8 @@ class My_Arm:
 
 
 if __name__ == '__main__':
+    area_max = float(input("Enter area size to detect bull"))
     arm = My_Arm()
+    arm.bull_close = area_max
     # arm.run()
     arm.test()
