@@ -154,8 +154,11 @@ class My_Arm:
     
     def detect_bull(self, img):
         img_lab = self.resize_and_smooth(img)
+        area_max = 0
+        area_max_cont = 0
         area_max_cont, area_max = self.detect_target_color(img_lab)
         if area_max > self.bull_close:
+            print(area_max_cont)
             self.bull_close = True
             world_x, world_y = self.detect_box(area_max_cont)
             self.draw(img, world_x, world_y)
