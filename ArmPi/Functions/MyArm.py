@@ -22,6 +22,11 @@ logging.getLogger().setLevel(logging.DEBUG)# This is the file I will do all my c
 
 class My_Arm:
     def __init__(self):
+        # For Bull
+        self.bull_close = 3000
+        self.bull_detected = False
+
+
         self.target_color = ()
         self.size = (640, 480)
         self.h = 0
@@ -87,6 +92,7 @@ class My_Arm:
         self.detect_color = 'None'
         self.action_finish = True
         self.start_count_t1 = True
+        self.bull_detected = False
 
     def start(self):
         self.reset()
@@ -145,6 +151,15 @@ class My_Arm:
         self.get_roi = True
         img_cent_x, img_cent_y = getCenter(self.rect, self.roi, self.size, square_length)
         return convertCoordinate(img_cent_x, img_cent_y, self.size)
+    
+    def detect_bull(self, img):
+        img_lab = self.resize_and_smooth(img)
+        area_max_cont, area_max = self.detect_target_color(img_lab)
+        if area_max > self.bull_close:
+            self.bull_close = True
+            self.setBuzzer(0.1)
+        else:
+            self.bull_close = False
 
     def draw(self, img, world_x, world_y):
         cv2.drawContours(img, [self.box], -1, self.range_rgb[self.detect_color], 2)
@@ -389,10 +404,28 @@ class My_Arm:
         cv2.destroyAllWindows()
 
 
-
+    def test(self):
+        self.init()
+        self.start()
+        self.target_color = ('red', )
+        cam = Camera.Camera()
+        cam.camera_open()
+        while True:
+            img = cam.frame
+            if img is not None:
+                frame = img.copy()
+                Frame = self.detect_bull(frame)
+            
+                cv2.imshow("img", Frame)
+                key = cv2.waitKey(1)
+                if key == 27:
+                    break
+        cam.camera_close()
+        cv2.destroyAllWindows()
 
 
 
 if __name__ == '__main__':
     arm = My_Arm()
-    arm.run()
+    # arm.run()
+    arm.test()
